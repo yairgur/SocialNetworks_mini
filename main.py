@@ -333,7 +333,7 @@ def main():
              (len(negative_voters(voters_lst, 0.8)) / len(voters_lst))))
     print(nx.density(NDG))
     #show_clustering(NDG)
-    #print(nx.diameter(NDG))
+    print(nx.diameter(NDG))
 
 
 
