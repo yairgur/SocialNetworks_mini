@@ -292,11 +292,11 @@ def find_max_connected_components(G):
     for comp in components:
         if len(comp) > max:
             max = len(comp)
-    return max
+    return (max, len(components))
 
 
 def main():
-    treshold = 0
+    treshold = 1
     votes_lst = create_votes_lst()
     distinct_voter_lst = distinct_voters_lst(votes_lst)
     voters_lst = create_voters_lst(votes_lst, distinct_voter_lst, treshold)
