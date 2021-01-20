@@ -4,185 +4,29 @@ import matplotlib.pyplot as plt
 import linecache
 import statistics
 from collections import Counter
-from scipy import sparse
-
-ATTR_NUM = 8    # Number of attributes for each vote in the input file
-file = open("wiki-RfA.txt", "r")
-
-
-
-class Vote(object):
-    def __init__(self, voter, voted_for, choice, result, year, date, comment):
-        self.voter = voter
-        self.voted_for = voted_for
-        self.choice = choice
-        self.result = result
-        self.year = year
-        self.date = date
-        self.comment = comment
-
-
-class Voter(object):
-    def __init__(self, name, total_votes, avg_vote_len, is_elected, oppose_votes, support_votes, neutral_votes, comment_lst):
-        self.name = name
-        self.total_votes = total_votes
-        self.avt_vote_len = avg_vote_len
-        self.is_elected = is_elected
-        self.oppose_votes = oppose_votes
-        self.support_votes = support_votes
-        self.neutral_votes = neutral_votes
-        self.comment_lst = comment_lst
-
-
-''' Helper function for parsing data from data-set '''
-def count_lines(file):
-    count = 0
-    for line in file:
-        count = count + 1
-    file.seek(0)
-    return count
-
-
-''' Create object of type Vote '''
-def create_vote(filename, i):
-    voter = linecache.getline(filename, i)[4:].strip()
-    voted_for = linecache.getline(filename, i + 1)[4:].strip()
-    choice = linecache.getline(filename, i + 2)[4:].strip()
-    result = linecache.getline(filename, i + 3)[4:].strip()
-    year = linecache.getline(filename, i + 4)[4:].strip()
-    date = linecache.getline(filename, i + 5)[4:].strip()
-    comment = linecache.getline(filename, i + 6)[4:].strip()
-    return Vote(voter, voted_for, choice, result, year, date, comment)
-
-
-''' Create an sorted and iterable list of all the votes in the data-set, beside those without information about the voter'''
-def create_votes_lst():
-    line = 1
-    sorted_votes_lst = []
-    filename = "wiki-RfA.txt"
-    num_of_lines = count_lines(file)
-    while line < num_of_lines:
-        vote = create_vote(filename, line)
-        line = line + ATTR_NUM
-        if vote.voter != "":     # ignoring votes without voter name
-            sorted_votes_lst.append(vote)
-    # possible sort in-place, using less memory  lst.sort(key=lambda x: x.voter, reverse=False)
-    return sorted(sorted_votes_lst, key=lambda x: x.voter, reverse=False)
-
-
-""" Create a list of voters with all info, only voters which voted more than "treshold" times """
-def create_voters_lst(votes_lst, treshold):
-    iter = 0
-    total_len = 0
-    total_votes = 0
-    res = []
-    comment_lst = []
-    votes = Counter(vote.voter for vote in votes_lst)
-    for vote in votes_lst:
-        total_len = total_len + len(vote.comment)
-        comment_lst.append((vote.choice, vote.comment, vote.voted_for))
-        total_votes = total_votes+1
-        iter = iter+1
-        if iter==votes[vote.voter]:
-            if total_votes > treshold:
-                res.append(Voter(vote.voter, total_votes, total_len // total_votes, 0, 0, 0, 0, comment_lst))
-            iter=0
-            comment_lst = []
-            total_len = 0
-            total_votes = 0
-
-
-
-    """for vote in votes_lst:
-        if vote.voter == distinct_voter_lst[i]:
-            total_votes=total_votes+1
-            total_len=total_len+len(vote.comment)
-            comment_lst.append((vote.choice, vote.comment))
-        else:
-            if total_votes>treshold:
-                res.append(Voter(vote.voter, total_votes, total_len//total_votes, 0, 0, 0, 0, comment_lst))
-            comment_lst = []
-            i=i+1
-            total_len=len(vote.comment)
-            total_votes=0
-            """
-    update_votes_for_voters(res)
-    update_is_elected(votes_lst, res)
-    return res
-
-
-""" Helper function for create_voters_list which update for each voter if he tried to be elected,
- and if he did, if he made it """
-def update_is_elected(votes_lst, voters_lst):
-    for vote in votes_lst:
-        for voter in voters_lst:
-            if voter.name == vote.voted_for:
-                voter.is_elected = vote.result
-
-
-""" Helper function for create_voters_lst,
- which update for each voter, how many votes he voted, and from what kind (support, oppose, neutral"""
-def update_votes_for_voters(voters_lst):
-    support = 0
-    oppose = 0
-    neutral = 0
-    for voter in voters_lst:
-        for choice in voter.comment_lst:
-            if choice[0] == "1":
-                support = support+1
-            elif choice[0] == "-1":
-                oppose = oppose+1
-            else:
-                neutral = neutral+1
-        voter.support_votes = support
-        voter.oppose_votes = oppose
-        voter.neutral_votes = neutral
-        support = 0
-        oppose = 0
-        neutral = 0
-
-
-""" A method from StackOverFlow -- 
-https://stackoverflow.com/questions/480214/how-do-you-remove-duplicates-from-a-list-whilst-preserving-order"""
-def f7(seq):
-    seen = set()
-    seen_add = seen.add
-    return [x for x in seq if not (x in seen or seen_add(x))]
-
-
-def distinct_voters_lst(votes_lst):
-    lst = []
-    for vote in votes_lst:
-        lst.append(vote.voter)
-    return f7(lst)
-
-
-def distinct_voted_for_lst(votes_lst):
-    lst = []
-    for vote in votes_lst:
-        lst.append(vote.voted_for)
-    return f7(lst)
-
-
-# currently not needed - FixMe
-def print_lst(lst):
-    for i in lst:
-        print(i)
+import numpy as np
 
 
 def positive_voters(voters_lst, treshold):
     pos_voters = {}
+    total_votes_plt = []
     for voter in voters_lst:
         if voter.support_votes/voter.total_votes > treshold:
-            pos_voters[voter.name] = voter.support_votes/voter.total_votes
+            pos_voters[voter.name] = voter.support_votes    #/voter.total_votes
+            total_votes_plt.append(voter.total_votes)
+    plot_scatter(total_votes_plt, list(pos_voters.values()), "Total votes for voter", "Positive votes", "Positive votes depending on the total votes of the voter")
     return pos_voters
 
 
 def negative_voters(voters_lst, treshold):
+    total_votes_plt = []
     neg_voters = {}
     for voter in voters_lst:
         if voter.oppose_votes/voter.total_votes > treshold:
-            neg_voters[voter.name] = voter.support_votes/voter.total_votes
+            neg_voters[voter.name] = voter.oppose_votes  #/voter.total_votes
+            total_votes_plt.append(voter.total_votes)
+    plot_scatter(total_votes_plt, list(neg_voters.values()), "Total votes for voter", "Negative votes",
+                "Negative votes depending on the total votes of the voter")
     return neg_voters
 
 
@@ -197,21 +41,46 @@ def get_median_of_votes_length(votes_lst):
 def corolation(voters_lst, median):
     res = []
     bad_long_comments = 0
+    bad_lst = []
+    voters_plt = []
+    ratio_plt = []
     for voter in voters_lst:
         for comment in voter.comment_lst:
             if len(comment[1]) > voter.avt_vote_len and comment[0]=="-1" and len(comment[1]) > median:
                 bad_long_comments=bad_long_comments+1
+            #if bad_long_comments > 50:
+        bad_lst.append(bad_long_comments)
+        voters_plt.append(voter.avt_vote_len)
         if voter.oppose_votes != 0:
-            res.append((voter.name, bad_long_comments, bad_long_comments/voter.oppose_votes))
+            ratio_plt.append(bad_long_comments / voter.oppose_votes)
+            res.append((voter.name, bad_long_comments, bad_long_comments / voter.oppose_votes))
+        else:
+            ratio_plt.append(0)
+        print("total recieved:",voter.name, voter.oppose_recieved, voter.neutral_recieved, voter.support_recieved, voter.total_recieved)
+
         bad_long_comments = 0
+
+    plot_scatter(voters_plt, bad_lst, 'Avg comment length', 'Bad Comments', "Bad Long Comments dependent on avg comment length?")
+    plot_scatter(ratio_plt, voters_plt, 'ratio bad/total oppose', 'Avg comment length',
+                 "Ratio of bad Comments dependent on avg comment length")
+
     return res
+
+
+def plot_scatter(x, y, x_label, y_label, title):
+    plt.plot(x, y, '.')
+    plt.plot(np.unique(x), np.poly1d(np.polyfit(x, y, 1))(np.unique(x)))
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.title(title)
+    plt.figure()
+    plt.show()
 
 
 """ Graph analysis and creation """
 def create_graph(G, NDG, voters_lst, treshold):
-    #votes = Counter(vote.voted_for for vote in votes_lst)
     for voter in voters_lst:
-        if voter.total_votes > treshold and voter.total_votes < 50:
+        if voter.total_votes > treshold:
             for comment in voter.comment_lst:
                 if comment[0] == "1":
                     G.add_edge(voter.name, comment[2], color='b', weight=1, relation="support")
@@ -222,19 +91,6 @@ def create_graph(G, NDG, voters_lst, treshold):
                 else:
                     G.add_edge(voter.name, comment[2], color='y', weight=0, relation="neutral")
                     NDG.add_edge(voter.name, comment[2], color='y', weight=0, relation="neutral")
-
-    """for vote in votes_lst:
-        if int(votes[vote.voted_for]) > treshold:
-            print("yair     ", votes[vote.voted_for])
-            if vote.choice == "1":
-                G.add_edge(vote.voter, vote.voted_for, color='b', weight=1, relation="support")
-                NDG.add_edge(vote.voter, vote.voted_for, color='b', weight=1, relation="support")
-            elif vote.choice == "-1":
-                G.add_edge(vote.voter, vote.voted_for, color='r', weight=-1, relation="oppose")
-                NDG.add_edge(vote.voter, vote.voted_for, color='r', weight=-1, relation="oppose")
-            else:
-                G.add_edge(vote.voter, vote.voted_for, color='y', weight=0, relation="neutral")
-                NDG.add_edge(vote.voter, vote.voted_for, color='y', weight=0, relation="neutral")"""
 
 
 def plot_deg_dist(G):
@@ -296,21 +152,23 @@ def deg_dist(G):
     out_degree_freq = degree_histogram_directed(G, out_degree=True)
     degrees = range(len(in_degree_freq))
     plt.figure(figsize=(12, 8))
-    plt.plot(range(len(in_degree_freq)), in_degree_freq, 'go-', label='in-degree')
-    plt.plot(range(len(out_degree_freq)), out_degree_freq, 'bo-', label='out-degree')
+    plt.loglog(range(len(in_degree_freq)), in_degree_freq, 'go-', label='in-degree')
+    plt.loglog(range(len(out_degree_freq)), out_degree_freq, 'bo-', label='out-degree')
     plt.xlabel('Degree')
     plt.ylabel('Frequency')
     plt.title("Degree distribution of RfA")
 
 
 def show_clustering(G):
-    for item in nx.clustering(G).items():
-        print(item)
+    lst = []
+    for key, value in nx.clustering(G).items():
+        print(key, value)
+        lst.append((key, value))
     print("Average clustering is: ", nx.average_clustering(G))
+    return lst  # .sort(key=lambda tup: tup[1])
 
 
-def find_max_connected_components(G):
-    components = list(nx.connected_components(G))
+def find_max_connected_components(G, components):
     max = 0
     for comp in components:
         if len(comp) > max:
@@ -318,18 +176,45 @@ def find_max_connected_components(G):
     return (max, len(components))
 
 
-def main():
+def diameter_list(G, components):
+    dia_lst = []
+    for comp in components:
+        dia_lst.append(nx.diameter(comp))
+    return dia_lst
 
+
+def find_max_in_dic(lst):
+    max = 0
+    name = ""
+    for key, value in lst.items():
+        if value > max:
+            max = value
+            name = key
+    return (name, max, len(lst))
+
+
+def voter_tri(G, voters_lst):
+    lst = []
+    for voter in voters_lst:
+        if voter.total_recieved > 60:
+            lst.append(voter)
+    lst_tri = []
+    for voter in lst:
+        for voter1 in lst:
+            lst_tri.append()
+
+def main():
+    """
     G = nx.DiGraph()
     NDG = nx.Graph()
-    treshold = 0
+    treshold = 3
     votes_lst = create_votes_lst()
-    #distinct_voter_lst = distinct_voters_lst(votes_lst)
-    voters_lst = create_voters_lst(votes_lst, treshold)
-    print("how many votes?", len(votes_lst))
+    
     create_graph(G, NDG, voters_lst, treshold)
-    print("how many voters? ", len(Counter(vote.voter for vote in votes_lst)))
+    components = [list(cc) for cc in nx.strongly_connected_components(G)]
+    componentsNDG = list(nx.connected_components(NDG))
     # relation = nx.get_edge_attributes(G, "relation")
+
     colors = nx.get_edge_attributes(G, 'color').values()
     pos = nx.spring_layout(G)   # pos = nx.circular_layout(G)
     deg = dict(G.degree)
@@ -337,36 +222,47 @@ def main():
     nx.draw(G, pos,
             edge_color=colors,
             node_size=[v / 10 for v in deg.values()])
-
-
-    """,with_labels=True)"""
-    plt.show()
-
-    plot_deg_dist(NDG)
-    deg_dist(G)
-    plt.show()
+    ,with_labels=True)
+    #plt.show()
+    #plot_deg_dist(NDG)
+    #deg_dist(G)
+    #plt.show()
 
     #for i in voters_lst:
         #print(i.name, i.oppose_votes, i.neutral_votes, i.support_votes, i.total_votes, i.avt_vote_len, i.is_elected)
-    #for i in corolation(voters_lst, get_median_of_votes_length(votes_lst)):
+    #for i in corolation(voters_lst, get_median_of_votes_length(votes_lst)): # here is corolation with bad comments - exhibit A
         #print(i[0], i[1], i[2])
-    #print("there are: ", len(voters_lst), " voters")
-    #print("there are: ", len(distinct_voted_for_lst(votes_lst)), " votees")
     print(nx.info(G))
-    #for voter in voters_lst:
-    #    if(voter.total_votes > treshold):
-    #        print(voter.name, voter.total_votes, voter.is_elected)
 
-#    votes = Counter(vote.voter for vote in votes_lst)
-    #print("Out of: %d voters, %d has a positive views in more than 80 precents of their votes.\n total of %f precents"
-    #      % (len(voters_lst),  len(positive_voters(voters_lst, 0.8)), (len(positive_voters(voters_lst, 0.8))/len(voters_lst))))
-    #print("Out of: %d voters, %d has a negative views in more than 80 precents of their votes.\n total of %f precents"
+
     #      % (len(voters_lst), len(negative_voters(voters_lst, 0.8)),
     #         (len(negative_voters(voters_lst, 0.8)) / len(voters_lst))))
-    #print(nx.density(NDG))
-    show_clustering(NDG)
-    print(nx.diameter(NDG))
+    print(nx.density(NDG))
+    print(nx.density(G))
+    #for comp in componentsNDG:
+     #   print("density of comp:",nx.density(comp))
+    lst = show_clustering(NDG)
+    print(type(lst))
+    print("len of clustered", len(lst), " len of voters: ", len(voters_lst))
+    lst = lst[:len(voters_lst)]
+    plot_scatter([i[1] for i in lst], [voter.total_recieved for voter in voters_lst], "Clustering Value", "Total Votes Recieved", "Clustering dependent on total voted recieved")
+    plot_scatter([i[1] for i in lst], [voter.oppose_recieved for voter in voters_lst], "Clustering Value", "Oppose Votes Recieved", "Clustering dependent on oppose voted recieved")
+    plot_scatter([i[1] for i in lst], [voter.support_recieved for voter in voters_lst], "Clustering Value", "Support Votes Recieved", "Clustering dependent on support voted recieved")
 
+    for item in lst[:len(voters_lst)]:
+        print(item)
+
+    print("The maximal component in the Directed Graph is: ", find_max_connected_components(G, components))
+    #print("The maximal component in the Non-Directed-Graph is: ", find_max_connected_components(NDG, componentsNDG))
+    #print(diameter_list(G, components))
+    #print(diameter_list(NDG, componentsNDG))
+    #print("The one who got the most votes support has: ", find_max_in_dic(favor))
+    #print("The one who got the most votes oppose has: ", find_max_in_dic(against))
+    ratio_negative = negative_voters(voters_lst, 0.8)
+    ratio_positive = positive_voters(voters_lst, 0.8)
+    print("ratio positive ", len(ratio_positive)/len(voters_lst))
+    print("ratio negative ", len(ratio_negative) / len(voters_lst))
+    """
 
 
 if __name__ == '__main__':
