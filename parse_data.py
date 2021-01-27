@@ -1,13 +1,12 @@
-import csv
 import networkx as nx
 import matplotlib.pyplot as plt
 import linecache
-import statistics
 from collections import Counter
 import datetime
-import numpy as np
+import main as m
 
 
+THRESHOLD = 25
 ATTR_NUM = 8    # Number of attributes for each vote in the input file
 file = open("wiki-RfA.txt", "r")
 
@@ -38,13 +37,6 @@ class Voter(object):
         self.support_recieved = support_recieved
         self.total_recieved = total_recieved
 
-
-class Voted_for(object):
-    def __init__(self, voted_for, is_elected, voters_lst):
-        self.voted_for = voted_for
-        self.is_elected = is_elected
-        self.voters_lst = voters_lst
-
 ''' Helper function for parsing data from data-set '''
 def count_lines(file):
     count = 0
@@ -69,7 +61,9 @@ def parse_vote(filename, i):
                 date = datetime.datetime.strptime(date, '%H:%M, %d %b %Y')
             except ValueError as e:
                 print("value error", date)
-    comment = linecache.getline(filename, i + 6)[4:].strip()
+    else:
+        date = datetime.datetime(2100, 12, 12, 12, 12) # if there is no date, it will be last
+    comment = linecache.getline(filename, i + 6)[4:].strip().replace('\n', ' ')
     return Vote(name, voted_for, choice, result, date, comment)
 
 
@@ -88,20 +82,25 @@ def create_votes_lst():
     return unsorted_votes_lst
 
 
-def create_voted_for_lst(votes_lst):
+# treshold to get those who got more than X votes
+def create_cand_lst(votes_lst, treshold):
     votes_lst = sorted(votes_lst, key=lambda x: x.voted_for, reverse=False)
     how_many_voted_for = Counter(vote.voted_for for vote in votes_lst)
-    lst_of_voters = []
+    votes = Counter(vote.name for vote in votes_lst)
+    tuple_of_cand_voters = []
     votes_lst_per_votee = []
     iter = 0
     for vote in votes_lst:
         votes_lst_per_votee.append(vote)
         iter = iter+1
         if iter == how_many_voted_for[vote.voted_for]:
-            lst_of_voters.append(Voted_for(vote.voted_for, vote.result, votes_lst_per_votee))
+            if how_many_voted_for[vote.voted_for] > treshold and votes[vote.name] > treshold:
+                votes_lst_per_votee.sort(key=lambda x: x.date)
+                tuple_of_cand_voters.append((Voter(vote.voted_for, treshold+1, 0, vote.result, 0, 0, 0, [], 0, 0, 0, len(votes_lst_per_votee)), votes_lst_per_votee))
+            #lst_of_voters.append(Voted_for(vote.voted_for, vote.result, votes_lst_per_votee))
             votes_lst_per_votee = []
             iter = 0
-    return lst_of_voters
+    return tuple_of_cand_voters
 
 
 """ Create a list of voters with all info, only voters which voted more than "treshold" times """
@@ -113,13 +112,14 @@ def create_voters_lst(votes_lst, treshold):
     res = []
     comment_lst = []
     votes = Counter(vote.name for vote in votes_lst)
+    how_many_voted_for = Counter(vote.voted_for for vote in votes_lst)
     for vote in votes_lst:
         total_len = total_len + len(vote.comment)
         comment_lst.append((vote.choice, vote.comment, vote.voted_for))
         total_votes = total_votes+1
         iter = iter+1
         if iter==votes[vote.name]:
-            if total_votes > treshold:
+            if total_votes > treshold and how_many_voted_for[vote.voted_for] > treshold:
                 res.append(Voter(vote.name, total_votes, total_len // total_votes, 0, 0, 0, 0, comment_lst, 0, 0, 0, 0))
             iter=0
             comment_lst = []
@@ -193,63 +193,100 @@ def update_recieved_votes(voters_lst):
         voter.total_recieved = voter.oppose_recieved + voter.neutral_recieved + voter.support_recieved
 
 
-""" A method from StackOverFlow -- 
-https://stackoverflow.com/questions/480214/how-do-you-remove-duplicates-from-a-list-whilst-preserving-order"""
-def f7(seq):
-    seen = set()
-    seen_add = seen.add
-    return [x for x in seq if not (x in seen or seen_add(x))]
-
-
-def distinct_voters_lst(votes_lst):
-    lst = []
+def voter_dic(votes_lst, voters_lst, THRESHOLD):
+    res = {}
+    i = 0
     for vote in votes_lst:
-        lst.append(vote.name)
-    return f7(lst)
+        for voter in voters_lst:
+            if vote.name == voter.name and voter.total_votes > THRESHOLD:
+                if vote.name in res.keys():
+                    (res[vote.name])[1].append(vote)
+                    i = i+1
+                else:
+                    i = i+1
+                    res[vote.name] = (voter, [vote])
+    print("number of action made (should be 10416) is", i)
+    print("len of res is: ", len(res.items()))
+    return res
 
 
-def distinct_voted_for_lst(votes_lst):
-    lst = []
-    for vote in votes_lst:
-        lst.append(vote.voted_for)
-    return f7(lst)
+def create_graph(cand_lst, voters_dic):
+    G = nx.DiGraph()
+    for cand in cand_lst:
+        for vote_rec in cand[1]:
+            if vote_rec.choice == "1":
+                #G.add_edge(vote_rec.name, cand[0].name, color='b', weight=len(vote_rec.comment))
+                G.add_edge(vote_rec.name, cand[0].name, color='b', weight=1)
+            elif vote_rec.choice == "-1":
+                #G.add_edge(vote_rec.name, cand[0].name, color='r', weight=len(vote_rec.comment))
+                G.add_edge(vote_rec.name, cand[0].name, color='r', weight=-1)
+            else:
+                #G.add_edge(vote_rec.name, cand[0].name, color='y', weight=len(vote_rec.comment))
+                G.add_edge(vote_rec.name, cand[0].name, color='y', weight=0)
+    NDG = G.to_undirected()  # NDG for Non-Directed-Graph
+    print(nx.info(G))
+    return G, NDG
 
-
-# currently not needed - FixMe
-def print_lst(lst):
-    for i in lst:
-        print(i)
-
-
-def create_csv_file(voted_for_lst):
-    with open("wiki-info.csv", 'w', newline='') as my_file:
-        fieldnames = ['User Name', 'Choice', 'Date', 'Comment']
-        writer = csv.DictWriter(my_file, delimiter='\t', fieldnames=fieldnames)
-        fieldnames_cand = ['', '']
-        writer_cand = csv.DictWriter(my_file, delimiter='\t', fieldnames=fieldnames_cand)
-
-        for candidate in voted_for_lst:
-            writer_cand.writerow({'' : candidate.voted_for, '' : candidate.is_elected})
-            writer.writeheader()
-            for vote in candidate.voters_lst:
-                writer.writerow({fieldnames[0] : vote.name, fieldnames[1] : vote.choice, fieldnames[2] : vote.date, fieldnames[3] : vote.comment})
-
-
-
+def paint_graph(G):
+    colors = nx.get_edge_attributes(G, 'color').values()
+    pos = nx.spring_layout(G)  # pos = nx.circular_layout(G)
+    deg = dict(G.degree)
+    nx.draw(G, pos,
+            edge_color=colors,
+            node_size=[v / 10 for v in deg.values()])
+    """,with_labels=True)"""
+    plt.show()
+    print(nx.info(G))
 
 def main():
+
     votes_lst = create_votes_lst()
-    voted_for_list = create_voted_for_lst(votes_lst)
-    iter = 0
-    print(voted_for_list[1].voted_for, voted_for_list[1].is_elected)
-    for i in range(len(voted_for_list[1].voters_lst)):
-        print(voted_for_list[1].voters_lst[i].name)
-    print()
-#    voters_lst = create_voters_lst(votes_lst, 0)
-    create_csv_file(voted_for_list)
+    voters_lst = create_voters_lst(votes_lst, THRESHOLD)
+    cand_lst = create_cand_lst(votes_lst, THRESHOLD)
+    #print("Ratio of candidates to voters is: ", len(cand_lst), " voters size: ", len(voters_lst))
+    """
+    counter = 0
+    for cand in cand_lst:
+        if cand[0].total_votes > 0:
+            counter = counter+1
+    print("how many candidates are also voters? : ", counter)
+    """
+    voters_dic = voter_dic(votes_lst, voters_lst, THRESHOLD)
+    G, NDG = create_graph(cand_lst, voters_dic)
 
 
+    """ --------------------------- Paint the Graph - takes tons of time -----------------------------------"""
+    #paint_graph(G)
+
+
+    """ ------------------------- Components and Clustering --------------------------------"""
+    print("Maximal component in G is: ",
+         m.find_max_connected_components(NDG, components=[list(cc) for cc in nx.strongly_connected_components(G)]))
+
+    print(m.show_clustering(G, 50))
+    print(m.show_clustering(NDG, 50))
+
+    """ ------------------------ Answer Research Question -----------------------------------"""
+
+    res = m.corolation(voters_lst, m.get_median_of_votes_length(votes_lst))
+    sum_weird = 0
+    sum_bad = 0
+    for info in res:
+        if info[2] > 0.5:
+            sum_bad = sum_bad + 1
+        if info[4] > 0.5:
+            sum_weird = sum_weird + 1
+    print("% of bad voters are there? ", sum_bad/len(res))
+    print("% weird voters are there? ", sum_weird / len(res))
+
+
+    """ ----------------------- Power Law Of Degrees ----------------------------------------"""
+    m.deg_dist(G)
+
+
+    """ ------------------------------ check positiveness and negativeness --------------------------"""
+    m.positive_voters(voters_lst, 0.8)
+    m.negative_voters(voters_lst, 0.8)
 
 if __name__ == '__main__':
     main()
-
